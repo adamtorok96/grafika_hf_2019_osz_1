@@ -39,10 +39,15 @@ const char * const vertexSource = R"(
 	precision highp float;		// normal floats, makes no difference on desktop computers
 
 	uniform mat4 MVP;			// uniform variable, the Model-View-Projection transformation matrix
-	layout(location = 0) in vec2 vp;	// Varying input: vp = vertex position is expected in attrib array 0
+
+    layout(location = 0) in vec2 vertexPos;	// Varying input: vp = vertex position is expected in attrib array 0
+    layout(location = 1) in vec3 vertexColor;
+
+    out vec3 color;
 
 	void main() {
-		gl_Position = vec4(vp.x, vp.y, 0, 1) * MVP;		// transform vp from modeling space to normalized device space
+		gl_Position = vec4(vertexPos.x, vertexPos.y, 0, 1) * MVP;		// transform vp from modeling space to normalized device space
+        color = vertexColor;
 	}
 )";
 
@@ -51,7 +56,7 @@ const char * const fragmentSource = R"(
 	#version 330			// Shader 3.3
 	precision highp float;	// normal floats, makes no difference on desktop computers
 
-	uniform vec3 color;		// uniform variable, the color of the primitive
+	in vec3 color;
 	out vec4 outColor;		// computed color of the current pixel
 
 	void main() {
@@ -90,11 +95,20 @@ void drawTriangle() {
     glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
+class VertexData {
+public:
+
+    vec2 pos;
+    vec3 color;
+
+    VertexData(vec2 pos = vec2(), vec3 color = vec3()) : pos{pos}, color{color} {};
+};
+
 class KochanekBartelsCurve {
     GLuint vao, vbo;
 
     std::vector<vec2> controlPoints;
-    std::vector<vec2> vertices;
+    std::vector<VertexData> vertices;
 
     const unsigned int MIN_CONTROL_POINTS = 4;
 
@@ -143,7 +157,8 @@ class KochanekBartelsCurve {
                 return Hermite(
                         controlPoints[i], v0, (float)i,
                         controlPoints[i + 1], v1, (float)(i + 1),
-                        t)
+                        t
+                    )
                 ;
             }
         }
@@ -158,7 +173,7 @@ class KochanekBartelsCurve {
         vertices.clear();
 
         for(float t = 1.0f; t < controlPoints.size() - 2; t += 0.05f) {
-            vertices.emplace_back(r(t));
+            vertices.emplace_back(VertexData(r(t), vec3(1.0f, 0.0f, 0.0f)));
         }
 
         loadVbo();
@@ -169,7 +184,7 @@ class KochanekBartelsCurve {
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vec2) * vertices.size(), &vertices[0], GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(VertexData) * vertices.size(), &vertices[0], GL_DYNAMIC_DRAW);
     }
 
 public:
@@ -181,7 +196,10 @@ public:
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), nullptr);
+
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), reinterpret_cast<void*>(sizeof(vec2)));
     }
 
     void Draw() const {
@@ -202,7 +220,7 @@ public:
         return controlPoints.size();
     }
 
-    const std::vector<vec2> & getVertices() const {
+    const std::vector<VertexData> & getVertices() const {
         return vertices;
     }
 };
@@ -210,23 +228,27 @@ public:
 class BicycleRoadGround {
     GLuint vao, vbo;
 
-    std::vector<vec2> vertices;
+    std::vector<VertexData> vertices;
 
-    void generate(std::vector<vec2> const & verts) {
+    void generate(std::vector<VertexData> const & verts) {
 
         vertices.clear();
 
         for(unsigned long i = 0; i < verts.size() - 1; i++) {
-            vertices.emplace_back(verts[i]);
-            vertices.emplace_back(verts[i].x, -1);
-            vertices.emplace_back(verts[i + 1]);
+            addVertices(verts[i].pos);
+            addVertices(vec2(verts[i].pos.x, -1));
+            addVertices(verts[i + 1].pos);
 
-            vertices.emplace_back(verts[i].x, -1);
-            vertices.emplace_back(verts[i + 1]);
-            vertices.emplace_back(verts[i + 1].x, -1);
+            addVertices(vec2(verts[i].pos.x, -1));
+            addVertices(verts[i + 1].pos);
+            addVertices(vec2(verts[i + 1].pos.x, -1));
         }
 
         loadVbo();
+    }
+
+    void addVertices(const vec2 & pos) {
+        vertices.emplace_back(VertexData(pos, vec3(0, 1, 0)));
     }
 
     void loadVbo() {
@@ -234,7 +256,7 @@ class BicycleRoadGround {
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vec2) * vertices.size(), &vertices[0], GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(VertexData) * vertices.size(), &vertices[0], GL_DYNAMIC_DRAW);
     }
 public:
 
@@ -246,7 +268,10 @@ public:
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), nullptr);
+
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), reinterpret_cast<void*>(sizeof(vec2)));
     }
 
     void Draw() {
@@ -257,7 +282,7 @@ public:
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size()));
     }
 
-    void onControlPointAdded(unsigned long nCps, std::vector<vec2> const & verts) {
+    void onControlPointAdded(unsigned long nCps, std::vector<VertexData> const & verts) {
         if( nCps < 4 )
             return;
 
@@ -268,12 +293,16 @@ public:
 class Cyclist {
     GLuint vao[2], vbo[2];
 
-    std::vector<vec2> staticVertices;
-    std::vector<vec2> dynamicVertices;
+    std::vector<VertexData> staticVertices;
+    std::vector<VertexData> dynamicVertices;
 
     const float headRadius = 0.03f;
     const float bodyLength = 0.05f;
     const float bicycleRadius = 0.06f;
+
+    const vec3 headColor = vec3(0, 0, 1);
+    const vec3 bodyColor = vec3(0, 1, 1);
+    const vec3 wheelColor = vec3(1, 0, 1);
 
     vec2 pos;
     vec2 bicycleCenter;
@@ -288,7 +317,10 @@ class Cyclist {
         glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
 
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), nullptr);
+
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), reinterpret_cast<void*>(sizeof(vec2)));
 
         loadStaticBuffers();
     }
@@ -301,7 +333,12 @@ class Cyclist {
         glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
 
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), nullptr);
+
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), reinterpret_cast<void*>(sizeof(vec2)));
+
+        loadDynamicBuffers();
     }
 
     void loadStaticBuffers() {
@@ -328,13 +365,13 @@ class Cyclist {
                     cosf(i * M_PI / 180.0f)
             ) * headRadius;
 
-            staticVertices.emplace_back(pos + p);
+            staticVertices.emplace_back(VertexData(pos + p, headColor));
         }
     }
 
     void loadBody() {
-        staticVertices.emplace_back(pos.x, pos.y - headRadius);
-        staticVertices.emplace_back(pos.x, pos.y - headRadius - bodyLength);
+        staticVertices.emplace_back(VertexData(vec2(pos.x, pos.y - headRadius), bodyColor));
+        staticVertices.emplace_back(VertexData(vec2(pos.x, pos.y - headRadius - bodyLength), bodyColor));
     }
 
     void loadWheel() {
@@ -344,7 +381,7 @@ class Cyclist {
                     cosf(i * M_PI / 180.0f)
             ) * bicycleRadius;
 
-            staticVertices.emplace_back(pos + p + bicycleCenter);
+            staticVertices.emplace_back(VertexData(pos + p + bicycleCenter, wheelColor));
         }
     }
 
@@ -355,8 +392,8 @@ class Cyclist {
                     cosf(i * M_PI / 180.0f + time)
             ) * bicycleRadius;
 
-            dynamicVertices.emplace_back(pos + bicycleCenter);
-            dynamicVertices.emplace_back(pos + bicycleCenter + p);
+            dynamicVertices.emplace_back(VertexData(pos + bicycleCenter, wheelColor));
+            dynamicVertices.emplace_back(VertexData(pos + bicycleCenter + p, wheelColor));
         }
     }
 
@@ -371,11 +408,11 @@ class Cyclist {
 
         vec2 wheelPos = vec2(pos + wheelRot + bicycleCenter);
 
-        dynamicVertices.emplace_back(hipPos);
-        dynamicVertices.emplace_back(kneePos);
+        dynamicVertices.emplace_back(VertexData(hipPos, bodyColor));
+        dynamicVertices.emplace_back(VertexData(kneePos, bodyColor));
 
-        dynamicVertices.emplace_back(kneePos);
-        dynamicVertices.emplace_back(wheelPos);
+        dynamicVertices.emplace_back(VertexData(kneePos, bodyColor));
+        dynamicVertices.emplace_back(VertexData(wheelPos, bodyColor));
     }
 
     void loadStaticVbo() {
@@ -383,7 +420,7 @@ class Cyclist {
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
 
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vec2) * staticVertices.size(), &staticVertices[0], GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(VertexData) * staticVertices.size(), &staticVertices[0], GL_STATIC_DRAW);
     }
 
     void loadDynamicVbo() {
@@ -391,7 +428,7 @@ class Cyclist {
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
 
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vec2) * dynamicVertices.size(), &dynamicVertices[0], GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(VertexData) * dynamicVertices.size(), &dynamicVertices[0], GL_DYNAMIC_DRAW);
     }
 
 public:
