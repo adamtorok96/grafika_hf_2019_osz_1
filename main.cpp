@@ -106,7 +106,7 @@ class Camera2D {
     vec2 wSize;   // width and height in world coordinates
 
 public:
-    Camera2D() : wCenter(0, 0), wSize(20, 20) { }
+    Camera2D() : wCenter(0, 0), wSize(2, 2) { }
 
     mat4 V() {
         return TranslateMatrix(-wCenter);
@@ -136,12 +136,28 @@ public:
 class Object {
 protected:
     const mat4 M() const {
-        return mat4(
+        mat4 scaleM(
+            scale.x, 0, 0, 0,
+            0, scale.y, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1
+        );
+
+        mat4 rotateZM(
+            cosf(rotate.z), sinf(rotate.z), 0, 0,
+            -sinf(rotate.z), cosf(rotate.z), 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1)
+        ;
+
+        mat4 translateM(
                 1, 0, 0, 0,
                 0, 1, 0, 0,
                 0, 0, 1, 0,
-                0, 0, 0, 1
+                position.x, position.y, 0, 1
         );
+
+        return scaleM * rotateZM * translateM;
     }
 
     const mat4 Minv() const {
@@ -149,7 +165,7 @@ protected:
                 1, 0, 0, 0,
                 0, 1, 0, 0,
                 0, 0, 1, 0,
-                0, 0, 0, 1
+                position.x * (-1), position.y * (-1), 0, 1
         );
     }
 
@@ -160,6 +176,10 @@ protected:
     }
 
 public:
+    vec2 scale = vec2(1, 1);
+    vec2 position;
+    vec3 rotate;
+
     virtual void Draw() const {
         mat4 MVPTransform = M() * camera.V() * camera.P();
         MVPTransform.SetUniform(gpuProgram.getId(), "MVP");
@@ -499,6 +519,7 @@ class Cyclist : Object {
         loadHead();
         loadBody();
         loadWheel();
+        loadSpoke();
 
         loadStaticVbo();
     }
@@ -506,7 +527,6 @@ class Cyclist : Object {
     void loadDynamicBuffers() {
         dynamicVertices.clear();
 
-        loadSpoke();
         loadFoot();
 
         loadDynamicVbo();
@@ -554,8 +574,8 @@ class Cyclist : Object {
                     cosf(i * M_PI / 180.0f + time)
             ) * bicycleRadius;
 
-            addDynamicVertex(pos + bicycleCenter, wheelColor);
-            addDynamicVertex(pos + bicycleCenter + p, wheelColor);
+            addStaticVertex(vec2(), wheelColor);
+            addStaticVertex(p, wheelColor);
         }
     }
 
@@ -593,6 +613,24 @@ class Cyclist : Object {
         glBufferData(GL_ARRAY_BUFFER, sizeof(VertexData) * dynamicVertices.size(), &dynamicVertices[0], GL_DYNAMIC_DRAW);
     }
 
+    mat4 wheelM() const {
+        mat4 trans = mat4(
+                1, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 1, 0,
+                0, bicycleCenter.y, 0, 1
+        );
+
+        mat4 rotate = mat4(
+                cos(time), sin(time), 0, 0,
+                sin(time) * (-1), cos(time), 0, 0,
+                0, 0, 1, 0,
+                0, 0, 0, 1
+        );
+
+        return rotate * trans * M();
+    }
+
 public:
     Cyclist() {
         bicycleCenter = vec2(pos.x, pos.y - headRadius - bodyLength - bicycleRadius);
@@ -609,6 +647,7 @@ public:
         time = dt;
 
         tmpPos.x += 0.001;
+        position.x += 0.001;
 
         loadDynamicBuffers();
     }
@@ -621,9 +660,16 @@ public:
         glDrawArrays(GL_LINE_STRIP, 360, 2); // it should be GL_LINES. wtf?
         glDrawArrays(GL_LINE_LOOP, 362, 360);
 
+        mat4 MVPTransform = wheelM() * camera.V() * camera.P();
+        MVPTransform.SetUniform(gpuProgram.getId(), "MVP");
+
+        glDrawArrays(GL_LINES, 722, 360);
+
+        Object::Draw();
+
         glBindVertexArray(vao[1]);
-        glDrawArrays(GL_LINES, 0, 360);
-        glDrawArrays(GL_LINES, 360, 4);
+
+        glDrawArrays(GL_LINES, 0, 4);
     }
 };
 
