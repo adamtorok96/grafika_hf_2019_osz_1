@@ -170,7 +170,7 @@ protected:
     }
 
     const vec2 vecTransform(const vec2 & vec) const {
-        vec4 wVertex = vec4(vec.x, vec.y, 0, 1) * camera.Pinv() * camera.Vinv() * Minv();
+        vec4 wVertex = vec4(vec.x, vec.y, 0, 1) * camera.Pinv() * camera.Vinv(); // * Minv();
 
         return vec2(wVertex.x, wVertex.y);
     }
@@ -474,10 +474,7 @@ class Cyclist : Object {
     const vec3 bodyColor = vec3(0, 1, 1);
     const vec3 wheelColor = vec3(1, 0, 1);
 
-    vec2 pos;
     vec2 bicycleCenter;
-
-    vec2 tmpPos;
 
     float time = 0.0f;
 
@@ -545,13 +542,13 @@ class Cyclist : Object {
                     cosf(i * M_PI / 180.0f)
             ) * headRadius;
 
-            addStaticVertex(pos + p, headColor);
+            addStaticVertex(p, headColor);
         }
     }
 
     void loadBody() {
-        addStaticVertex(vec2(pos.x, pos.y - headRadius), bodyColor);
-        addStaticVertex(vec2(pos.x, pos.y - headRadius - bodyLength), bodyColor);
+        addStaticVertex(vec2(0, headRadius * (-1)), bodyColor);
+        addStaticVertex(vec2(0, (headRadius + bodyLength) * (-1)), bodyColor);
     }
 
     void loadWheel() {
@@ -561,7 +558,7 @@ class Cyclist : Object {
                     cosf(i * M_PI / 180.0f)
             ) * bicycleRadius;
 
-            addStaticVertex(pos + p + bicycleCenter, wheelColor);
+            addStaticVertex(p + bicycleCenter, wheelColor);
         }
     }
 
@@ -578,15 +575,15 @@ class Cyclist : Object {
     }
 
     void loadFoot() {
-        vec2 hipPos = vec2(pos.x, pos.y - headRadius - bodyLength);
-        vec2 kneePos = hipPos + vec2(pos.x + 0.08f, sin(time) * 0.05f);
+        vec2 hipPos = vec2(0, (headRadius + bodyLength) *(-1));
+        vec2 kneePos = hipPos + vec2(0.08f, sin(time) * 0.05f);
 
         vec2 wheelRot = vec2(
                 sinf(M_PI / 180.0f + time),
                 cosf(M_PI / 180.0f + time)
         ) * bicycleRadius;
 
-        vec2 wheelPos = vec2(pos + wheelRot + bicycleCenter);
+        vec2 wheelPos = vec2(wheelRot + bicycleCenter);
 
         addDynamicVertex(hipPos, bodyColor);
         addDynamicVertex(kneePos, bodyColor);
@@ -631,7 +628,7 @@ class Cyclist : Object {
 
 public:
     Cyclist() {
-        bicycleCenter = vec2(pos.x, pos.y - headRadius - bodyLength - bicycleRadius);
+        bicycleCenter = vec2(0, (headRadius + bodyLength + bicycleRadius) * (-1));
     }
 
     void Init() {
