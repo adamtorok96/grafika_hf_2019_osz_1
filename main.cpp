@@ -78,8 +78,6 @@ void initTriangle() {
     // Geometry with 24 bytes (6 floats or 3 x 2 coordinates)
     float vertices[] = { -0.8f, -0.8f, -0.6f, 1.0f, 0.8f, -0.2f };
 
-    printf("size of verts: %d\n", sizeof(vertices));
-
     glBufferData(GL_ARRAY_BUFFER, 	// Copy to GPU target
                  sizeof(vertices),  // # bytes
                  vertices,	      	// address
@@ -462,6 +460,16 @@ public:
     }
 
     void Draw() {
+
+        float MVPtransf[4][4] = { 1, 0, 0, 0,    // MVP matrix,
+                                  0, 1, 0, 0,    // row-major!
+                                  0, 0, 1, 0,
+                                  tmpPos.x, 0, 0, 1 };
+
+        int location = glGetUniformLocation(gpuProgram.getId(), "MVP");	// Get the GPU location of uniform variable MVP
+        glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);	// Load a 4x4 row-major float matrix to the specified location
+
+
         glBindVertexArray(vao[0]);
         glDrawArrays(GL_LINE_LOOP, 0, 360);
         glDrawArrays(GL_LINE_STRIP, 360, 2); // it should be GL_LINES. wtf?
