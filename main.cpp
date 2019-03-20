@@ -194,12 +194,21 @@ class TexturedQuad {
 
     unsigned int width = 128, height = 128;
 
+    mat4 MVP;
+
 public:
     TexturedQuad() {
         vertices[0] = vec2(-1, -1); uvs[0] = vec2(0, 0);
         vertices[1] = vec2(1, -1);  uvs[1] = vec2(1, 0);
         vertices[2] = vec2(1, 1);   uvs[2] = vec2(1, 1);
         vertices[3] = vec2(-1, 1);  uvs[3] = vec2(0, 1);
+
+        MVP = mat4(
+                1, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 1, 0,
+                0, 0, 0, 1
+        );
     }
 
     void Init() {
@@ -252,18 +261,7 @@ public:
     void Draw() {
         glBindVertexArray(vao);
 
-        //mat4 MVPTransform = camera.V() * camera.P();
-
-        float MVPtransf[4][4] = { 1, 0, 0, 0,    // MVP matrix,
-                                  0, 1, 0, 0,    // row-major!
-                                  0, 0, 1, 0,
-                                  0, 0, 0, 1 };
-
-        int location = glGetUniformLocation(gpuProgram.getId(), "MVP");	// Get the GPU location of uniform variable MVP
-        glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);	// Load a 4x4 row-major float matrix to the specified location
-
-        // set GPU uniform matrix variable MVP with the content of CPU variable MVPTransform
-        //MVPTransform.SetUniform(gpuProgram.getId(), "MVP");
+        MVP.SetUniform(backgroundProgram.getId(), "MVP");
 
         pTexture->SetUniform(backgroundProgram.getId(), "textureUnit");
 
@@ -646,7 +644,6 @@ public:
     void Animate(float dt) {
         time = dt;
 
-        tmpPos.x += 0.001;
         position.x += 0.001;
 
         loadDynamicBuffers();
