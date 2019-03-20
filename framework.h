@@ -127,7 +127,7 @@ public:
         return result;
     }
 
-    void SetUniform(unsigned shaderProg, char * name) {
+    void SetUniform(unsigned shaderProg, const char * name) {
         int location = glGetUniformLocation(shaderProg, name);
         if (location >= 0) glUniformMatrix4fv(location, 1, GL_TRUE, &m[0][0]);
         else printf("uniform %s cannot be set\n", name);
