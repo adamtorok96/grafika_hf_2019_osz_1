@@ -31,6 +31,7 @@
 // Tudomasul veszem, hogy a forrasmegjeloles kotelmenek megsertese eseten a hazifeladatra adhato pontokat
 // negativ elojellel szamoljak el es ezzel parhuzamosan eljaras is indul velem szemben.
 //=============================================================================================
+#include <algorithm>
 #include "framework.h"
 
 // vertex shader in GLSL: It is a Raw string (C++11) since it contains new line characters
@@ -187,6 +188,11 @@ class KochanekBartelsCurve {
         glBufferData(GL_ARRAY_BUFFER, sizeof(VertexData) * vertices.size(), &vertices[0], GL_DYNAMIC_DRAW);
     }
 
+    static bool comparePos(vec2 v1, vec2 v2)
+    {
+        return (v1.x < v2.x);
+    }
+
 public:
     void Init() {
         glGenVertexArrays(1, &vao);
@@ -212,6 +218,8 @@ public:
 
     void addControlPoint(float x, float y) {
         controlPoints.emplace_back(x, y);
+
+        std::sort(controlPoints.begin(), controlPoints.end(), comparePos);
 
         generateCurve();
     }
@@ -306,6 +314,8 @@ class Cyclist {
 
     vec2 pos;
     vec2 bicycleCenter;
+
+    vec2 tmpPos;
 
     float time = 0.0f;
 
@@ -446,6 +456,8 @@ public:
     void Animate(float dt) {
         time = dt;
 
+        tmpPos.x += 0.001;
+
         loadDynamicBuffers();
     }
 
@@ -472,6 +484,12 @@ void onInitialization() {
     bicycleRoad.Init();
     bicycleRoadGround.Init();
     cyclist.Init();
+
+    for(float x = -1.5f; x < 1.5f; x += 0.1f) {
+        bicycleRoad.addControlPoint(x, sin(x * 10) * 0.1f - 0.3f);
+    }
+
+    bicycleRoadGround.onControlPointAdded(bicycleRoad.getControlPointsSize(), bicycleRoad.getVertices());
 
     // create program for the GPU
     gpuProgram.Create(vertexSource, fragmentSource, "outColor");
