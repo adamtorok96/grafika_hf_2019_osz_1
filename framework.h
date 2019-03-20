@@ -219,7 +219,7 @@ struct Texture {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     }
 
-    void SetUniform(unsigned shaderProg, char * samplerName, unsigned int textureUnit = 0) {
+    void SetUniform(unsigned shaderProg, const char * samplerName, unsigned int textureUnit = 0) {
         int location = glGetUniformLocation(shaderProg, samplerName);
         if (location >= 0) {
             glUniform1i(location, textureUnit);
