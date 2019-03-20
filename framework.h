@@ -245,7 +245,7 @@ class GPUProgram {
             delete log;
         }
     }
-    void checkShader(unsigned int shader, char * message) { 	// check if shader could be compiled
+    void checkShader(unsigned int shader, const char * message) { 	// check if shader could be compiled
         int OK;
         glGetShaderiv(shader, GL_COMPILE_STATUS, &OK);
         if (!OK) { printf("%s!\n", message); getErrorInfo(shader); getchar(); }
