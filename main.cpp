@@ -478,6 +478,9 @@ class Cyclist : Object {
 
     float time = 0.0f;
 
+    unsigned int stepOnRoad = 0;
+    bool dirOnRoad = true;
+
     void initStaticVao() {
         glBindVertexArray(vao[0]);
 
@@ -638,10 +641,31 @@ public:
         initDynamicVao();
     }
 
-    void Animate(float dt) {
+    void Animate(float dt, const KochanekBartelsCurve & road) {
         time = dt;
 
-        position.x += 0.001;
+        unsigned long size = road.getVertices().size();
+
+        position =
+                road.getVertices()[stepOnRoad] -
+                bicycleCenter +
+                vec2(0, bicycleRadius)
+        ;
+
+        if( dirOnRoad ) {
+            stepOnRoad++;
+
+            if( stepOnRoad == size - 1 ) {
+                dirOnRoad = false;
+            }
+
+        } else {
+            stepOnRoad--;
+
+            if( stepOnRoad == 0 ) {
+                dirOnRoad = true;
+            }
+        }
 
         loadDynamicBuffers();
     }
@@ -770,13 +794,13 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
-    static float oldTime = 0.0f;
+//    static float oldTime = 0.0f;
 
     float time = glutGet(GLUT_ELAPSED_TIME) / 1000.f; // elapsed time since the start of the program
-    float dt = time - oldTime;
-    oldTime = time;
+//    float dt = time - oldTime;
+//    oldTime = time;
 
-    cyclist.Animate(time);
+    cyclist.Animate(time, bicycleRoad);
 
     glutPostRedisplay();
 }
