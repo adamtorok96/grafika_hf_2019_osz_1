@@ -264,7 +264,8 @@ class KochanekBartelsCurve : public Object {
     GLuint vao, vbo;
 
     std::vector<vec2> controlPoints;
-    std::vector<VertexData> vertices;
+    std::vector<vec2> vertices;
+    std::vector<VertexData> vertexData;
 
     const unsigned int MIN_CONTROL_POINTS = 4;
 
@@ -303,14 +304,18 @@ class KochanekBartelsCurve : public Object {
             return;
 
         vertices.clear();
+        vertexData.clear();
 
         for(float t = 1.0f; t < controlPoints.size() - 2; t += 0.05f) {
-            vec2 v = vecTransform(r(t));
-
-            vertices.emplace_back(VertexData(v, vec3(1.0f, 0.0f, 0.0f)));
+            addVertex(r(t), vec3(1.0f, 0.0f, 0.0f));
         }
 
         loadVbo();
+    }
+
+    void addVertex(const vec2 & v, const vec3 & color) {
+        vertices.emplace_back(v);
+        vertexData.emplace_back(VertexData(vecTransform(v), color));
     }
 
     void loadVbo() {
@@ -318,7 +323,7 @@ class KochanekBartelsCurve : public Object {
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
-        glBufferData(GL_ARRAY_BUFFER, sizeof(VertexData) * vertices.size(), &vertices[0], GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(VertexData) * vertexData.size(), &vertexData[0], GL_DYNAMIC_DRAW);
     }
 
     static bool comparePos(vec2 v1, vec2 v2)
@@ -358,14 +363,14 @@ public:
         Object::Draw();
 
         glBindVertexArray(vao);
-        glDrawArrays(GL_LINE_STRIP, 0, static_cast<GLsizei>(vertices.size()));
+        glDrawArrays(GL_LINE_STRIP, 0, static_cast<GLsizei>(vertexData.size()));
     }
 
     unsigned long getControlPointsSize() const {
         return controlPoints.size();
     }
 
-    const std::vector<VertexData> & getVertices() const {
+    const std::vector<vec2> & getVertices() const {
         return vertices;
     }
 };
@@ -375,25 +380,25 @@ class BicycleRoadGround : Object {
 
     std::vector<VertexData> vertices;
 
-    void generate(std::vector<VertexData> const & verts) {
+    void generate(std::vector<vec2> const & verts) {
 
         vertices.clear();
 
         for(unsigned long i = 0; i < verts.size() - 1; i++) {
-            addVertices(verts[i].pos);
-            addVertices(vec2(verts[i].pos.x, -1));
-            addVertices(verts[i + 1].pos);
+            addVertices(verts[i]);
+            addVertices(vec2(verts[i].x, -1));
+            addVertices(verts[i + 1]);
 
-            addVertices(vec2(verts[i].pos.x, -1));
-            addVertices(verts[i + 1].pos);
-            addVertices(vec2(verts[i + 1].pos.x, -1));
+            addVertices(vec2(verts[i].x, -1));
+            addVertices(verts[i + 1]);
+            addVertices(vec2(verts[i + 1].x, -1));
         }
 
         loadVbo();
     }
 
     void addVertices(const vec2 & pos) {
-        vertices.emplace_back(VertexData(pos, vec3(0, 1, 0)));
+        vertices.emplace_back(VertexData(vecTransform(pos), vec3(0, 1, 0)));
     }
 
     void loadVbo() {
@@ -429,7 +434,7 @@ public:
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size()));
     }
 
-    void onControlPointAdded(unsigned long nCps, std::vector<VertexData> const & verts) {
+    void onControlPointAdded(unsigned long nCps, std::vector<vec2> const & verts) {
         if( nCps < 4 )
             return;
 
