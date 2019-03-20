@@ -32,6 +32,7 @@
 // negativ elojellel szamoljak el es ezzel parhuzamosan eljaras is indul velem szemben.
 //=============================================================================================
 #include <algorithm>
+#include <complex>
 #include "framework.h"
 
 // vertex shader in GLSL: It is a Raw string (C++11) since it contains new line characters
@@ -100,93 +101,154 @@ const char * backgroundFragmentShader = R"(
 GPUProgram gpuProgram; // vertex and fragment shaders
 GPUProgram backgroundProgram;
 
+class Camera2D {
+    vec2 wCenter; // center in world coordinates
+    vec2 wSize;   // width and height in world coordinates
+
+public:
+    Camera2D() : wCenter(0, 0), wSize(20, 20) { }
+
+    mat4 V() {
+        return TranslateMatrix(-wCenter);
+    }
+
+    mat4 P() {
+        return ScaleMatrix(vec2(2 / wSize.x, 2 / wSize.y));
+    }
+
+    mat4 Vinv() {
+        return TranslateMatrix(wCenter);
+    }
+
+    mat4 Pinv() {
+        return ScaleMatrix(vec2(wSize.x / 2, wSize.y / 2));
+    }
+
+    void Zoom(float s) {
+        wSize = wSize * s;
+    }
+
+    void Pan(vec2 t) {
+        wCenter = wCenter + t;
+    }
+} camera;
+
+class Object {
+protected:
+    const mat4 M() const {
+        return mat4(
+                1, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 1, 0,
+                0, 0, 0, 1
+        );
+    }
+
+    const mat4 Minv() const {
+        return mat4(
+                1, 0, 0, 0,
+                0, 1, 0, 0,
+                0, 0, 1, 0,
+                0, 0, 0, 1
+        );
+    }
+
+    const vec2 vecTransform(const vec2 & vec) const {
+        vec4 wVertex = vec4(vec.x, vec.y, 0, 1) * camera.Pinv() * camera.Vinv() * Minv();
+
+        return vec2(wVertex.x, wVertex.y);
+    }
+
+public:
+    virtual void Draw() const {
+        mat4 MVPTransform = M() * camera.V() * camera.P();
+        MVPTransform.SetUniform(gpuProgram.getId(), "MVP");
+    }
+};
+
 class TexturedQuad {
-        GLuint vao, vbo[2];
-        vec2 vertices[4], uvs[4];
-        Texture * pTexture;
+    GLuint vao, vbo[2];
+    vec2 vertices[4], uvs[4];
 
-        public:
-        TexturedQuad() {
-            vertices[0] = vec2(-10, -10); uvs[0] = vec2(0, 0);
-            vertices[1] = vec2(10, -10);  uvs[1] = vec2(1, 0);
-            vertices[2] = vec2(10, 10);   uvs[2] = vec2(1, 1);
-            vertices[3] = vec2(-10, 10);  uvs[3] = vec2(0, 1);
-        }
+    Texture * pTexture;
 
-        void Create( ) {
-            glGenVertexArrays(1, &vao);	// create 1 vertex array object
-            glBindVertexArray(vao);		// make it active
+    unsigned int width = 128, height = 128;
 
-            glGenBuffers(2, vbo);	// Generate 1 vertex buffer objects
+public:
+    TexturedQuad() {
+        vertices[0] = vec2(-1, -1); uvs[0] = vec2(0, 0);
+        vertices[1] = vec2(1, -1);  uvs[1] = vec2(1, 0);
+        vertices[2] = vec2(1, 1);   uvs[2] = vec2(1, 1);
+        vertices[3] = vec2(-1, 1);  uvs[3] = vec2(0, 1);
+    }
 
-            // vertex coordinates: vbo[0] -> Attrib Array 0 -> vertexPosition of the vertex shader
-            glBindBuffer(GL_ARRAY_BUFFER, vbo[0]); // make it active, it is an array
-            glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);	   // copy to that part of the memory which will be modified
-            // Map Attribute Array 0 to the current bound vertex buffer (vbo[0])
-            glEnableVertexAttribArray(0);
-            glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);     // stride and offset: it is tightly packed
+    void Init() {
+        glGenVertexArrays(1, &vao);
+        glBindVertexArray(vao);
 
-            glBindBuffer(GL_ARRAY_BUFFER, vbo[1]); // make it active, it is an array
-            glBufferData(GL_ARRAY_BUFFER, sizeof(uvs), uvs, GL_STATIC_DRAW);	   // copy to that part of the memory which is not modified
-            // Map Attribute Array 0 to the current bound vertex buffer (vbo[0])
-            glEnableVertexAttribArray(1);
-            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, NULL);     // stride and offset: it is tightly packed
+        glGenBuffers(2, vbo);
 
-            int width = 128, height = 128;
-            std::vector<vec4> image(width * height);
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    float luminance = ((x / 16) % 2) ^ ((y / 16) % 2);
-                    image[y * width + x] = vec4(luminance, luminance, luminance, 1);
-                }
+        glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
+
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(uvs), uvs, GL_STATIC_DRAW);
+
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+
+        std::vector<vec4> image(width * height);
+
+        for (unsigned int y = 0; y < height; y++) {
+            for (unsigned int x = 0; x < width; x++) {
+                image[y * width + x] = vec4(Mandelbrot(x, y), 0, 0, 1);
             }
-
-            pTexture = new Texture(width, height, image);
         }
 
-        /*
-        void MoveVertex(float cX, float cY) {
-            glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+        pTexture = new Texture(width, height, image);
+    }
 
-            vec4 wCursor4 = vec4(cX, cY, 0, 1) * camera.Pinv() * camera.Vinv();
-            vec2 wCursor(wCursor4.x, wCursor4.y);
+    float Mandelbrot (unsigned int x, unsigned int y)  {
+        std::complex<float> point((float)x / width - 1.5f, (float)y / height - 0.5f);
 
-            int closestVertex = 0;
-            float distMin = length(vertices[0] - wCursor);
-            for (int i = 1; i < 4; i++) {
-                float dist = length(vertices[i] - wCursor);
-                if (dist < distMin) {
-                    distMin = dist;
-                    closestVertex = i;
-                }
-            }
-            vertices[closestVertex] = wCursor;
+        std::complex<float> z(0, 0);
 
-            // copy data to the GPU
-            glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);	   // copy to that part of the memory which is modified
+        unsigned int nb_iter = 0;
+
+        while (abs (z) < 2 && nb_iter <= 34) {
+            z = z * z + point;
+            nb_iter++;
         }
-*/
-        void Draw() {
-            glBindVertexArray(vao);	// make the vao and its vbos active playing the role of the data source
 
-            //mat4 MVPTransform = camera.V() * camera.P();
+        if (nb_iter < 34)
+            return 1.0f;
 
-            float MVPtransf[4][4] = { 1, 0, 0, 0,    // MVP matrix,
-                                      0, 1, 0, 0,    // row-major!
-                                      0, 0, 1, 0,
-                                      0, 0, 0, 1 };
+        return 0.0f;
+    }
 
-            int location = glGetUniformLocation(gpuProgram.getId(), "MVP");	// Get the GPU location of uniform variable MVP
-            glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);	// Load a 4x4 row-major float matrix to the specified location
+    void Draw() {
+        glBindVertexArray(vao);
 
+        //mat4 MVPTransform = camera.V() * camera.P();
 
-            // set GPU uniform matrix variable MVP with the content of CPU variable MVPTransform
-            //MVPTransform.SetUniform(gpuProgram.getId(), "MVP");
+        float MVPtransf[4][4] = { 1, 0, 0, 0,    // MVP matrix,
+                                  0, 1, 0, 0,    // row-major!
+                                  0, 0, 1, 0,
+                                  0, 0, 0, 1 };
 
-            pTexture->SetUniform(backgroundProgram.getId(), "textureUnit");
+        int location = glGetUniformLocation(gpuProgram.getId(), "MVP");	// Get the GPU location of uniform variable MVP
+        glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);	// Load a 4x4 row-major float matrix to the specified location
 
-            glDrawArrays(GL_TRIANGLE_FAN, 0, 4);	// draw two triangles forming a quad
-        }
+        // set GPU uniform matrix variable MVP with the content of CPU variable MVPTransform
+        //MVPTransform.SetUniform(gpuProgram.getId(), "MVP");
+
+        pTexture->SetUniform(backgroundProgram.getId(), "textureUnit");
+
+        glDrawArrays(GL_TRIANGLE_FAN, 0, 4);	// draw two triangles forming a quad
+    }
 };
 
 class VertexData {
@@ -195,10 +257,10 @@ public:
     vec2 pos;
     vec3 color;
 
-    VertexData(vec2 pos = vec2(), vec3 color = vec3()) : pos{pos}, color{color} {};
+    explicit VertexData(vec2 pos = vec2(), vec3 color = vec3()) : pos{pos}, color{color} {};
 };
 
-class KochanekBartelsCurve {
+class KochanekBartelsCurve : public Object {
     GLuint vao, vbo;
 
     std::vector<vec2> controlPoints;
@@ -243,7 +305,9 @@ class KochanekBartelsCurve {
         vertices.clear();
 
         for(float t = 1.0f; t < controlPoints.size() - 2; t += 0.05f) {
-            vertices.emplace_back(VertexData(r(t), vec3(1.0f, 0.0f, 0.0f)));
+            vec2 v = vecTransform(r(t));
+
+            vertices.emplace_back(VertexData(v, vec3(1.0f, 0.0f, 0.0f)));
         }
 
         loadVbo();
@@ -277,13 +341,7 @@ public:
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), reinterpret_cast<void*>(sizeof(vec2)));
     }
 
-    void Draw() const {
-        if( controlPoints.size() < MIN_CONTROL_POINTS )
-            return;
-
-        glBindVertexArray(vao);
-        glDrawArrays(GL_LINE_STRIP, 0, static_cast<GLsizei>(vertices.size()));
-    }
+public:
 
     void addControlPoint(float x, float y) {
         controlPoints.emplace_back(x, y);
@@ -291,6 +349,16 @@ public:
         std::sort(controlPoints.begin(), controlPoints.end(), comparePos);
 
         generateCurve();
+    }
+
+    void Draw() const override {
+        if( controlPoints.size() < MIN_CONTROL_POINTS )
+            return;
+
+        Object::Draw();
+
+        glBindVertexArray(vao);
+        glDrawArrays(GL_LINE_STRIP, 0, static_cast<GLsizei>(vertices.size()));
     }
 
     unsigned long getControlPointsSize() const {
@@ -302,7 +370,7 @@ public:
     }
 };
 
-class BicycleRoadGround {
+class BicycleRoadGround : Object {
     GLuint vao, vbo;
 
     std::vector<VertexData> vertices;
@@ -351,9 +419,11 @@ public:
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), reinterpret_cast<void*>(sizeof(vec2)));
     }
 
-    void Draw() {
+    void Draw() const override {
         if( vertices.empty() )
             return;
+
+        Object::Draw();
 
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size()));
@@ -367,7 +437,7 @@ public:
     }
 };
 
-class Cyclist {
+class Cyclist : Object {
     GLuint vao[2], vbo[2];
 
     std::vector<VertexData> staticVertices;
@@ -437,6 +507,14 @@ class Cyclist {
         loadDynamicVbo();
     }
 
+    void addStaticVertex(const vec2 & v, const vec3 & color) {
+        staticVertices.emplace_back(VertexData(vecTransform(v), color));
+    }
+
+    void addDynamicVertex(const vec2 & v, const vec3 & color) {
+        dynamicVertices.emplace_back(VertexData(vecTransform(v), color));
+    }
+
     void loadHead() {
         for(unsigned int i = 0; i < 360; i++) {
             vec2 p = vec2(
@@ -444,13 +522,13 @@ class Cyclist {
                     cosf(i * M_PI / 180.0f)
             ) * headRadius;
 
-            staticVertices.emplace_back(VertexData(pos + p, headColor));
+            addStaticVertex(pos + p, headColor);
         }
     }
 
     void loadBody() {
-        staticVertices.emplace_back(VertexData(vec2(pos.x, pos.y - headRadius), bodyColor));
-        staticVertices.emplace_back(VertexData(vec2(pos.x, pos.y - headRadius - bodyLength), bodyColor));
+        addStaticVertex(vec2(pos.x, pos.y - headRadius), bodyColor);
+        addStaticVertex(vec2(pos.x, pos.y - headRadius - bodyLength), bodyColor);
     }
 
     void loadWheel() {
@@ -460,7 +538,7 @@ class Cyclist {
                     cosf(i * M_PI / 180.0f)
             ) * bicycleRadius;
 
-            staticVertices.emplace_back(VertexData(pos + p + bicycleCenter, wheelColor));
+            addStaticVertex(pos + p + bicycleCenter, wheelColor);
         }
     }
 
@@ -471,8 +549,8 @@ class Cyclist {
                     cosf(i * M_PI / 180.0f + time)
             ) * bicycleRadius;
 
-            dynamicVertices.emplace_back(VertexData(pos + bicycleCenter, wheelColor));
-            dynamicVertices.emplace_back(VertexData(pos + bicycleCenter + p, wheelColor));
+            addDynamicVertex(pos + bicycleCenter, wheelColor);
+            addDynamicVertex(pos + bicycleCenter + p, wheelColor);
         }
     }
 
@@ -487,11 +565,11 @@ class Cyclist {
 
         vec2 wheelPos = vec2(pos + wheelRot + bicycleCenter);
 
-        dynamicVertices.emplace_back(VertexData(hipPos, bodyColor));
-        dynamicVertices.emplace_back(VertexData(kneePos, bodyColor));
+        addDynamicVertex(hipPos, bodyColor);
+        addDynamicVertex(kneePos, bodyColor);
 
-        dynamicVertices.emplace_back(VertexData(kneePos, bodyColor));
-        dynamicVertices.emplace_back(VertexData(wheelPos, bodyColor));
+        addDynamicVertex(kneePos, bodyColor);
+        addDynamicVertex(wheelPos, bodyColor);
     }
 
     void loadStaticVbo() {
@@ -530,16 +608,8 @@ public:
         loadDynamicBuffers();
     }
 
-    void Draw() {
-
-        float MVPtransf[4][4] = { 1, 0, 0, 0,    // MVP matrix,
-                                  0, 1, 0, 0,    // row-major!
-                                  0, 0, 1, 0,
-                                  tmpPos.x, 0, 0, 1 };
-
-        int location = glGetUniformLocation(gpuProgram.getId(), "MVP");	// Get the GPU location of uniform variable MVP
-        glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);	// Load a 4x4 row-major float matrix to the specified location
-
+    void Draw() const override {
+        Object::Draw();
 
         glBindVertexArray(vao[0]);
         glDrawArrays(GL_LINE_LOOP, 0, 360);
@@ -562,7 +632,7 @@ Cyclist cyclist;
 void onInitialization() {
     glViewport(0, 0, windowWidth, windowHeight);
 
-    background.Create();
+    background.Init();
 
     bicycleRoad.Init();
     bicycleRoadGround.Init();
@@ -589,18 +659,6 @@ void onDisplay() {
 
     gpuProgram.Use();
 
-    // Set color to (0, 1, 0) = green
-    int location;// = glGetUniformLocation(gpuProgram.getId(), "color");
-    //glUniform3f(location, 0.0f, 1.0f, 0.0f); // 3 floats
-
-    float MVPtransf[4][4] = { 1, 0, 0, 0,    // MVP matrix,
-                              0, 1, 0, 0,    // row-major!
-                              0, 0, 1, 0,
-                              0, 0, 0, 1 };
-
-    location = glGetUniformLocation(gpuProgram.getId(), "MVP");	// Get the GPU location of uniform variable MVP
-    glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);	// Load a 4x4 row-major float matrix to the specified location
-
     bicycleRoad.Draw();
     bicycleRoadGround.Draw();
     cyclist.Draw();
@@ -610,8 +668,16 @@ void onDisplay() {
 
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
-    if (key == 'd')
-        glutPostRedisplay();         // if d, invalidate display, i.e. redraw
+    switch(key) {
+        case 's': camera.Pan(vec2(-1, 0)); break;
+        case 'd': camera.Pan(vec2(+1, 0)); break;
+        case 'e': camera.Pan(vec2( 0, 1)); break;
+        case 'x': camera.Pan(vec2( 0,-1)); break;
+        case 'z': camera.Zoom(0.9f); break;
+        case 'Z': camera.Zoom(1.1f); break;
+
+        default: break;
+    }
 }
 
 // Key of ASCII code released
