@@ -100,13 +100,25 @@ class KochanekBartelsCurve {
 
     }
 
+    float L(unsigned int i, float t) {
+        float Li = 1.0f;
+
+        for(int j = 0; j < controlPoints.size(); j++) {
+            if (j != i)
+                Li *= (t - (float)j) / ((float)i - (float)j);
+        }
+
+        return Li;
+    }
+
     vec2 r(float t) {
         vec2 v;
 
         for(unsigned int i = 0; i < controlPoints.size(); i++) {
-            v = v + controlPoints[i] * KB();
+            v = v + controlPoints[i] * L(i, t);
         }
 
+//        printf("x: %f, y: %f\n", v.x, v.y);
         return v;
     }
 
@@ -114,9 +126,11 @@ class KochanekBartelsCurve {
         if( controlPoints.size() < 3 )
             return;
 
+        printf("gen curv\n");
+
         vertices.clear();
 
-        for(float t = 0.0f; t < controlPoints.size(); t += 0.5f) {
+        for(float t = 0.0f; t < controlPoints.size() - 1; t += 0.05f) {
             vertices.emplace_back(r(t));
         }
 
@@ -168,19 +182,19 @@ KochanekBartelsCurve bicycleRoad;
  p1 = Pi
  P2 = Pi + 1
  */
-vec2 getKBSDi(unsigned int i) {
-    float t = 0.0f;
-    float b = 0.0f;
-    float c = 0.0f;
+//vec2 getKBSDi(unsigned int i) {
+//    float t = 0.0f;
+//    float b = 0.0f;
+//    float c = 0.0f;
+//
+//    float x1 = ((1 - t) * (1 + b) * (1 + c)) / 2;
+//    float x2 = ((1 - t) * (1 - b) * (1 - c)) / 2;
 
-    float x1 = ((1 - t) * (1 + b) * (1 + c)) / 2;
-    float x2 = ((1 - t) * (1 - b) * (1 - c)) / 2;
-
-    vec2 x = (controlPoints[i] - controlPoints[i - 1]) * x1;
-    vec2 y = (controlPoints[i + 1] - controlPoints[i]) * x2;
-
-    return x + y;
-}
+//    vec2 x = (controlPoints[i] - controlPoints[i - 1]) * x1;
+//    vec2 y = (controlPoints[i + 1] - controlPoints[i]) * x2;
+//
+//    return x + y;
+//}
 
 // Initialization, create an OpenGL context
 void onInitialization() {
