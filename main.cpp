@@ -96,10 +96,9 @@ class KochanekBartelsCurve {
     std::vector<vec2> controlPoints;
     std::vector<vec2> vertices;
 
-    float KB() {
+    const unsigned int MIN_CONTROL_POINTS = 4;
 
-    }
-
+    /*
     float L(unsigned int i, float t) {
         float Li = 1.0f;
 
@@ -121,16 +120,44 @@ class KochanekBartelsCurve {
 //        printf("x: %f, y: %f\n", v.x, v.y);
         return v;
     }
+     */
+
+    vec2 Hermite(vec2 p0, vec2 v0, float t0, vec2 p1, vec2 v1, float t1, float t) {
+        vec2 a0 = p0;
+        vec2 a1 = v0;
+        vec2 a2 = ((p1 - p0) * 3) - (v1 + v0 * 2);
+        vec2 a3 = ((p0 - p1) * 2) + (v1 + v0);
+
+//        printf("t: %f, t0: %f t1: %f\n", t, t0, t1);
+
+        return a3 * pow(t - t0, 3) + a2 * pow(t - t0, 2) + a1 * (t - t0) + a0;
+    }
+
+    vec2 r(float t) {
+        for(unsigned int i = 1; i < controlPoints.size() - 2; i++) {
+            if( (float)i <= t && t <= (float)(i+1) ) {
+
+                vec2 v0 = ((controlPoints[i + 1] - controlPoints[i]) + (controlPoints[i] - controlPoints[i-1])) * 0.5f;
+                vec2 v1 = ((controlPoints[i + 2] - controlPoints[i + 1]) + (controlPoints[i + 1] - controlPoints[i])) * 0.5f;
+
+                return Hermite(
+                        controlPoints[i], v0, (float)i,
+                        controlPoints[i + 1], v1, (float)(i + 1),
+                        t)
+                ;
+            }
+        }
+
+        return {};
+    }
 
     void generateCurve() {
-        if( controlPoints.size() < 3 )
+        if( controlPoints.size() < MIN_CONTROL_POINTS )
             return;
-
-        printf("gen curv\n");
 
         vertices.clear();
 
-        for(float t = 0.0f; t < controlPoints.size() - 1; t += 0.05f) {
+        for(float t = 1.0f; t < controlPoints.size() - 2; t += 0.05f) {
             vertices.emplace_back(r(t));
         }
 
@@ -143,9 +170,6 @@ class KochanekBartelsCurve {
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
         glBufferData(GL_ARRAY_BUFFER, sizeof(vec2) * vertices.size(), &vertices[0], GL_DYNAMIC_DRAW);
-
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
     }
 
 public:
@@ -154,13 +178,15 @@ public:
         glBindVertexArray(vao);
 
         glGenBuffers(1, &vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
     }
 
-    void Draw() {
-        if( controlPoints.size() < 3 )
+    void Draw() const {
+        if( controlPoints.size() < MIN_CONTROL_POINTS )
             return;
-
-        printf("Draw bicycle road!\n");
 
         glBindVertexArray(vao);
         glDrawArrays(GL_LINE_STRIP, 0, static_cast<GLsizei>(vertices.size()));
@@ -171,36 +197,244 @@ public:
 
         generateCurve();
     }
+
+    unsigned long getControlPointsSize() const {
+        return controlPoints.size();
+    }
+
+    const std::vector<vec2> & getVertices() const {
+        return vertices;
+    }
+};
+
+class BicycleRoadGround {
+    GLuint vao, vbo;
+
+    std::vector<vec2> vertices;
+
+    void generate(std::vector<vec2> const & verts) {
+
+        vertices.clear();
+
+        for(unsigned long i = 0; i < verts.size() - 1; i++) {
+            vertices.emplace_back(verts[i]);
+            vertices.emplace_back(verts[i].x, -1);
+            vertices.emplace_back(verts[i + 1]);
+
+            vertices.emplace_back(verts[i].x, -1);
+            vertices.emplace_back(verts[i + 1]);
+            vertices.emplace_back(verts[i + 1].x, -1);
+        }
+
+        loadVbo();
+    }
+
+    void loadVbo() {
+        glBindVertexArray(vao);
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vec2) * vertices.size(), &vertices[0], GL_DYNAMIC_DRAW);
+    }
+public:
+
+    void Init() {
+        glGenVertexArrays(1, &vao);
+        glBindVertexArray(vao);
+
+        glGenBuffers(1, &vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+    }
+
+    void Draw() {
+        if( vertices.empty() )
+            return;
+
+        glBindVertexArray(vao);
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size()));
+    }
+
+    void onControlPointAdded(unsigned long nCps, std::vector<vec2> const & verts) {
+        if( nCps < 4 )
+            return;
+
+        generate(verts);
+    }
+};
+
+class Cyclist {
+    GLuint vao[2], vbo[2];
+
+    std::vector<vec2> staticVertices;
+    std::vector<vec2> dynamicVertices;
+
+    const float headRadius = 0.03f;
+    const float bodyLength = 0.05f;
+    const float bicycleRadius = 0.06f;
+
+    vec2 pos;
+    vec2 bicycleCenter;
+
+    float time = 0.0f;
+
+    void initStaticVao() {
+        glBindVertexArray(vao[0]);
+
+        glGenBuffers(1, &vbo[0]);
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+
+        loadStaticBuffers();
+    }
+
+    void initDynamicVao() {
+        glBindVertexArray(vao[1]);
+
+        glGenBuffers(1, &vbo[1]);
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
+
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+    }
+
+    void loadStaticBuffers() {
+        loadHead();
+        loadBody();
+        loadWheel();
+
+        loadStaticVbo();
+    }
+
+    void loadDynamicBuffers() {
+        dynamicVertices.clear();
+
+        loadSpoke();
+        loadFoot();
+
+        loadDynamicVbo();
+    }
+
+    void loadHead() {
+        for(unsigned int i = 0; i < 360; i++) {
+            vec2 p = vec2(
+                    sinf(i * M_PI / 180.0f),
+                    cosf(i * M_PI / 180.0f)
+            ) * headRadius;
+
+            staticVertices.emplace_back(pos + p);
+        }
+    }
+
+    void loadBody() {
+        staticVertices.emplace_back(pos.x, pos.y - headRadius);
+        staticVertices.emplace_back(pos.x, pos.y - headRadius - bodyLength);
+    }
+
+    void loadWheel() {
+        for(unsigned int i = 0; i < 360; i++) {
+            vec2 p = vec2(
+                    sinf(i * M_PI / 180.0f),
+                    cosf(i * M_PI / 180.0f)
+            ) * bicycleRadius;
+
+            staticVertices.emplace_back(pos + p + bicycleCenter);
+        }
+    }
+
+    void loadSpoke() {
+        for(unsigned int i = 0; i < 360; i += 36) {
+            vec2 p = vec2(
+                    sinf(i * M_PI / 180.0f + time),
+                    cosf(i * M_PI / 180.0f + time)
+            ) * bicycleRadius;
+
+            dynamicVertices.emplace_back(pos + bicycleCenter);
+            dynamicVertices.emplace_back(pos + bicycleCenter + p);
+        }
+    }
+
+    void loadFoot() {
+        vec2 hipPos = vec2(pos.x, pos.y - headRadius - bodyLength);
+        vec2 kneePos = hipPos + vec2(pos.x + 0.08f, sin(time) * 0.05f);
+
+        vec2 wheelRot = vec2(
+                sinf(M_PI / 180.0f + time),
+                cosf(M_PI / 180.0f + time)
+        ) * bicycleRadius;
+
+        vec2 wheelPos = vec2(pos + wheelRot + bicycleCenter);
+
+        dynamicVertices.emplace_back(hipPos);
+        dynamicVertices.emplace_back(kneePos);
+
+        dynamicVertices.emplace_back(kneePos);
+        dynamicVertices.emplace_back(wheelPos);
+    }
+
+    void loadStaticVbo() {
+        glBindVertexArray(vao[0]);
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vec2) * staticVertices.size(), &staticVertices[0], GL_STATIC_DRAW);
+    }
+
+    void loadDynamicVbo() {
+        glBindVertexArray(vao[1]);
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
+
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vec2) * dynamicVertices.size(), &dynamicVertices[0], GL_DYNAMIC_DRAW);
+    }
+
+public:
+    Cyclist() {
+        bicycleCenter = vec2(pos.x, pos.y - headRadius - bodyLength - bicycleRadius);
+    }
+
+    void Init() {
+        glGenVertexArrays(2, &vao[0]);
+
+        initStaticVao();
+        initDynamicVao();
+    }
+
+    void Animate(float dt) {
+        time = dt;
+
+        loadDynamicBuffers();
+    }
+
+    void Draw() {
+        glBindVertexArray(vao[0]);
+        glDrawArrays(GL_LINE_LOOP, 0, 360);
+        glDrawArrays(GL_LINE_STRIP, 360, 2); // it should be GL_LINES. wtf?
+        glDrawArrays(GL_LINE_LOOP, 362, 360);
+
+        glBindVertexArray(vao[1]);
+        glDrawArrays(GL_LINES, 0, 360);
+        glDrawArrays(GL_LINES, 360, 4);
+    }
 };
 
 KochanekBartelsCurve bicycleRoad;
-
-//
-/**
- https://en.wikipedia.org/wiki/Kochanek%E2%80%93Bartels_spline
- p0 = Pi - 1
- p1 = Pi
- P2 = Pi + 1
- */
-//vec2 getKBSDi(unsigned int i) {
-//    float t = 0.0f;
-//    float b = 0.0f;
-//    float c = 0.0f;
-//
-//    float x1 = ((1 - t) * (1 + b) * (1 + c)) / 2;
-//    float x2 = ((1 - t) * (1 - b) * (1 - c)) / 2;
-
-//    vec2 x = (controlPoints[i] - controlPoints[i - 1]) * x1;
-//    vec2 y = (controlPoints[i + 1] - controlPoints[i]) * x2;
-//
-//    return x + y;
-//}
+BicycleRoadGround bicycleRoadGround;
+Cyclist cyclist;
 
 // Initialization, create an OpenGL context
 void onInitialization() {
     glViewport(0, 0, windowWidth, windowHeight);
 
     bicycleRoad.Init();
+    bicycleRoadGround.Init();
+    cyclist.Init();
 
     // create program for the GPU
     gpuProgram.Create(vertexSource, fragmentSource, "outColor");
@@ -224,6 +458,8 @@ void onDisplay() {
     glUniformMatrix4fv(location, 1, GL_TRUE, &MVPtransf[0][0]);	// Load a 4x4 row-major float matrix to the specified location
 
     bicycleRoad.Draw();
+    bicycleRoadGround.Draw();
+    cyclist.Draw();
 
     glutSwapBuffers(); // exchange buffers for double buffering
 }
@@ -254,7 +490,10 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
     float cY = 1.0f - 2.0f * pY / windowHeight;
 
     if( button == GLUT_LEFT_BUTTON && state == GLUT_DOWN ) {
+//        printf("cX: %f, cY: %f\n", cX, cY) ;
         bicycleRoad.addControlPoint(cX, cY);
+
+        bicycleRoadGround.onControlPointAdded(bicycleRoad.getControlPointsSize(), bicycleRoad.getVertices());
 
         glutPostRedisplay();
     }
@@ -276,5 +515,13 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
-    long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
+    static float oldTime = 0.0f;
+
+    float time = glutGet(GLUT_ELAPSED_TIME) / 1000.f; // elapsed time since the start of the program
+    float dt = time - oldTime;
+    oldTime = time;
+
+    cyclist.Animate(time);
+
+    glutPostRedisplay();
 }
