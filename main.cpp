@@ -57,8 +57,6 @@ const char * backgroundVertexShader = R"(
 	#version 330
     precision highp float;
 
-	uniform mat4 MVP;			// Model-View-Projection matrix in row-major format
-
 	layout(location = 0) in vec2 vertexPosition;	// Attrib Array 0
 	layout(location = 1) in vec2 vertexUV;			// Attrib Array 1
 
@@ -66,7 +64,7 @@ const char * backgroundVertexShader = R"(
 
 	void main() {
 		texCoord = vertexUV;														// copy texture coordinates
-		gl_Position = vec4(vertexPosition.x, vertexPosition.y, 0, 1) * MVP; 		// transform to clipping space
+		gl_Position = vec4(vertexPosition.x, vertexPosition.y, 0, 1);		// transform to clipping space
 	}
 )";
 
@@ -194,8 +192,6 @@ class TexturedQuad {
 
     unsigned int width = 128, height = 128;
 
-    mat4 MVP;
-
 public:
     TexturedQuad() {
         vertices[0] = vec2(-1, -1); uvs[0] = vec2(0, 0);
@@ -203,12 +199,6 @@ public:
         vertices[2] = vec2(1, 1);   uvs[2] = vec2(1, 1);
         vertices[3] = vec2(-1, 1);  uvs[3] = vec2(0, 1);
 
-        MVP = mat4(
-                1, 0, 0, 0,
-                0, 1, 0, 0,
-                0, 0, 1, 0,
-                0, 0, 0, 1
-        );
     }
 
     void Init() {
@@ -260,8 +250,6 @@ public:
 
     void Draw() {
         glBindVertexArray(vao);
-
-        MVP.SetUniform(backgroundProgram.getId(), "MVP");
 
         pTexture->SetUniform(backgroundProgram.getId(), "textureUnit");
 
